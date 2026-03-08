@@ -558,7 +558,7 @@ app.post(
       const txtFile = files?.txt?.[0];
 
       if (!mp3) return res.status(400).json({ error: "MP3 file is required." });
-      if (!vtt) return res.status(400).json({ error: "VTT file is required." });
+      // removed: if (!vtt) return res.status(400).json({ error: "VTT file is required." });
 
       // ✅ Text can come from body.text OR from uploaded txt file
       const textFromBody = typeof req.body?.text === "string" ? String(req.body.text) : "";
@@ -582,7 +582,7 @@ app.post(
 
       // Write files
       await fs.promises.writeFile(path.join(bookFolderPath(book), `${base}.mp3`), mp3.buffer);
-      await fs.promises.writeFile(path.join(bookFolderPath(book), `${base}.vtt`), vtt.buffer);
+      if (vtt) await fs.promises.writeFile(path.join(bookFolderPath(book), `${base}.vtt`), vtt.buffer);
       await fs.promises.writeFile(path.join(bookFolderPath(book), `${base}.txt`), finalText, "utf-8");
 
       const part: BookPart = { id: nextId, label: labelRaw, base };

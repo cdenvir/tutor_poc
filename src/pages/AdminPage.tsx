@@ -230,7 +230,7 @@ export default function AdminPage() {
 
     if (!partLabel.trim()) return setErr("Part label is required.");
     if (!mp3File) return setErr("MP3 is required.");
-    if (!vttFile) return setErr("VTT is required.");
+    // removed: if (!vttFile) return setErr("VTT is required.");
 
     // Either textarea or txt file must be provided
     const hasText = Boolean(partText.trim());
@@ -251,7 +251,7 @@ export default function AdminPage() {
       }
 
       fd.append("mp3", mp3File);
-      fd.append("vtt", vttFile);
+      if (vttFile) fd.append("vtt", vttFile);
       fd.append("teacher", "true");
 
       const r = await fetch(`/api/books/${encodeURIComponent(activeBook.id)}/parts`, {
@@ -672,7 +672,7 @@ export default function AdminPage() {
                         />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div className="muted" style={{ marginBottom: 6 }}>VTT</div>
+                        <div className="muted" style={{ marginBottom: 6 }}>VTT (optional)</div>
                         <input
                           type="file"
                           accept=".vtt,text/vtt"

@@ -49,5 +49,11 @@
         "base": "Vanishing Cream"
       }
     ]
+  },
+  {
+    "id": "new-book-123",
+    "title": "New book 123",
+    "folder": "New book 123",
+    "parts": []
   }
 ]
