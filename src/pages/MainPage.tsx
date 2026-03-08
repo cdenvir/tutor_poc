@@ -20,25 +20,37 @@ export default function MainPage() {
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       try {
         setErr(null);
-        // const res = await fetch(encodePath("/media/books/books.json"), { cache: "no-store" });
+
         const res = await fetch("/api/books", { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`Failed to load books (${res.status})`);
+        }
+
         const j = await res.json();
-        setBooks(j.books);
-        
-        if (!res.ok) throw new Error(`Failed to load books.json (${res.status})`);
-        const data = (await res.json()) as Book[];
-        if (!cancelled) setBooks(data);
+        if (!cancelled) {
+          setBooks(j.books ?? []);
+        }
       } catch (e: any) {
-        if (!cancelled) setErr(e?.message || "Failed to load book list.");
+        if (!cancelled) {
+          setErr(e?.message || "Failed to load book list.");
+        }
       }
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const activeBook = useMemo(() => books.find((b) => b.id === bookId) ?? null, [books, bookId]);
+  const activeBook = useMemo(
+    () => books.find((b) => b.id === bookId) ?? null,
+    [books, bookId]
+  );
+
   const activePart = useMemo(() => {
     if (!activeBook) return null;
     const pid = Number(partId);
@@ -106,9 +118,7 @@ export default function MainPage() {
           </div>
         )}
 
-        {!err && basePath && (
-          <ReaderPanel basePath={basePath} />
-        )}
+        {!err && basePath && <ReaderPanel basePath={basePath} />}
       </div>
     </div>
   );
