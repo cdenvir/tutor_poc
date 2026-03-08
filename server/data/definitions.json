@@ -1,0 +1,18 @@
+{
+  "television": {
+    "word": "television",
+    "definition_ko": "화면과 소리로 영상이나 프로그램을 보여 주는 기계",
+    "example_en": "I watched cartoons on the television.",
+    "example_ko": "나는 텔레비전으로 만화를 봤어.",
+    "createdAt": "2026-03-01T11:33:19.228Z",
+    "model": "gpt-5-mini"
+  },
+  "watching": {
+    "word": "watching",
+    "definition_ko": "무엇을 보고 지켜보는 상태(보고 있는 중)",
+    "example_en": "I am watching the bird.",
+    "example_ko": "나는 새를 보고 있어요.",
+    "createdAt": "2026-03-01T11:33:37.448Z",
+    "model": "gpt-5-mini"
+  }
+}

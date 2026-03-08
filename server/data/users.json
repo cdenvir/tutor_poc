@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "username": "cdenvir",
+    "firstName": "Chris",
+    "lastName": "Denvir",
+    "gender": "M",
+    "yearOfBirth": 1983,
+    "teacher": true,
+    "englishName": "Chris"
+  },
+  {
+    "id": 2,
+    "username": "rhan",
+    "firstName": "Aekyung",
+    "lastName": "Han",
+    "gender": "F",
+    "yearOfBirth": 1983,
+    "teacher": true,
+    "englishName": "Rona"
+  },
+  {
+    "id": 3,
+    "username": "student",
+    "firstName": "서인",
+    "lastName": "한",
+    "gender": "F",
+    "yearOfBirth": 2013,
+    "teacher": false,
+    "englishName": "Mary"
+  }
+]

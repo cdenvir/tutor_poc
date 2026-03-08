@@ -1,0 +1,53 @@
+[
+  {
+    "id": "kipper-giant",
+    "title": "Kipper and the Giant",
+    "folder": "Kipper and the Giant",
+    "parts": [
+      {
+        "id": 1,
+        "label": "Part 1",
+        "base": "Kipper and the giant - 1"
+      },
+      {
+        "id": 2,
+        "label": "Part 2",
+        "base": "Kipper and the giant - 2"
+      },
+      {
+        "id": 3,
+        "label": "Part 3",
+        "base": "Kipper and the giant - 3"
+      }
+    ]
+  },
+  {
+    "id": "christmas-adventure",
+    "title": "Christmas Adventure",
+    "folder": "Christmas Adventure",
+    "parts": [
+      {
+        "id": 1,
+        "label": "Part 1",
+        "base": "Christmas Adventure - 1"
+      },
+      {
+        "id": 2,
+        "label": "Part 2",
+        "base": "Christmas Adventure - 2"
+      }
+    ]
+  },
+  {
+    "id": "vanishing-cream",
+    "title": "Vanishing Cream",
+    "folder": "Vanishing Cream",
+    "parts": [
+      {
+        "id": 1,
+        "label": "Full Story",
+        "base": "Vanishing Cream"
+      }
+    ]
+  }
+]
