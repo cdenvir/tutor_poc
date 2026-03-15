@@ -20,7 +20,7 @@ async function fileToText(file: File): Promise<string> {
   return await file.text();
 }
 
-export default function AdminPage() {
+export default function AdminBookManagement() {
   const user = getUser();
   const navigate = useNavigate();
 
@@ -142,12 +142,12 @@ export default function AdminPage() {
               <div className="logoDot" />
               <div>
                 <div className="title">Echo</div>
-                <div className="subtitle">Admin Page</div>
+                <div className="subtitle">Admin • Book Management</div>
               </div>
             </div>
             <div className="row">
-              <Link className="btn" to="/books">
-                ← Book Selection
+              <Link className="btn" to="/admin">
+                ← Admin
               </Link>
               <button className="btn" onClick={logout}>
                 Logout
@@ -374,13 +374,13 @@ export default function AdminPage() {
             <div className="logoDot" />
             <div>
               <div className="title">Echo</div>
-              <div className="subtitle">Admin Page • Books & Parts</div>
+              <div className="subtitle">Admin • Book Management • Books & Parts</div>
             </div>
           </div>
 
           <div className="row">
-            <Link className="btn" to="/books">
-              ← Book Selection
+            <Link className="btn" to="/admin">
+              ← Admin
             </Link>
             <span className="badge">Admin</span>
             <button className="btn" onClick={logout}>

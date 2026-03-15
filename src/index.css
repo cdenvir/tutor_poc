@@ -162,3 +162,9 @@ a { color: inherit; }
   background: var(--border);
   margin: 14px 0;
 }
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
