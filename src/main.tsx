@@ -7,6 +7,7 @@ import MainPage from "./pages/MainPage";
 import BookSelectionPage from "./pages/BookSelectionPage";
 import RequireAuth from "./routes/RequireAuth";
 import AdminPage from "./pages/AdminPage";
+import AdminHomePage from "./pages/AdminHomePage";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -26,7 +27,16 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Route
           path="/admin"
           element={
-            <RequireAuth>
+            <RequireAuth teacherOnly>
+              <AdminHomePage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/admin/book-management"
+          element={
+            <RequireAuth teacherOnly>
               <AdminPage />
             </RequireAuth>
           }
