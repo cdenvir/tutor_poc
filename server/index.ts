@@ -6,7 +6,7 @@ import cors from "cors";
 import multer from "multer";
 import fs from "node:fs";
 import path from "node:path";
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 
 const app = express();
 app.use(cors());
@@ -246,20 +246,289 @@ function indexedWords(words: string[]): string {
   return words.map((w, i) => `${i}:${w}`).join(" ");
 }
 
+type ProgressEventType =
+  | "listen"
+  | "record_start"
+  | "record_stop"
+  | "analysis";
+
+type ProgressMistake = {
+  startIndex: number;
+  endIndex: number;
+  expected: string;
+  heard: string;
+  kind: "missing" | "substitution" | "extra" | "reorder" | "unclear";
+};
+
+type ProgressEvent = {
+  id: string;
+  timestamp: string;
+  userId: number;
+  username: string;
+  teacher: boolean;
+  bookId: string;
+  bookTitle: string;
+  partId: number;
+  partLabel: string;
+  eventType: ProgressEventType;
+  payload?: {
+    source?: string;
+    durationSec?: number;
+    scorePercent?: number;
+    summary?: string;
+    originalText?: string;
+    transcribedText?: string;
+    mistakes?: ProgressMistake[];
+  };
+};
+
+type ProgressStore = {
+  events: ProgressEvent[];
+};
+
+const STUDENT_PROGRESS_PATH = path.join(
+  process.cwd(),
+  "server",
+  "data",
+  "studentProgress.json"
+);
+
+function ensureStudentProgressExists() {
+  if (!fs.existsSync(STUDENT_PROGRESS_PATH)) {
+    fs.mkdirSync(path.dirname(STUDENT_PROGRESS_PATH), { recursive: true });
+    fs.writeFileSync(
+      STUDENT_PROGRESS_PATH,
+      JSON.stringify({ events: [] }, null, 2),
+      "utf-8"
+    );
+  }
+}
+
+function loadStudentProgress(): ProgressStore {
+  ensureStudentProgressExists();
+  const txt = fs.readFileSync(STUDENT_PROGRESS_PATH, "utf-8");
+  const parsed = JSON.parse(txt);
+
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("studentProgress.json must be an object");
+  }
+
+  const events = Array.isArray(parsed.events) ? parsed.events : [];
+  return { events };
+}
+
+let studentProgressWriteQueue: Promise<any> = Promise.resolve();
+
+function saveStudentProgress(store: ProgressStore) {
+  ensureStudentProgressExists();
+
+  studentProgressWriteQueue = studentProgressWriteQueue.then(async () => {
+    const tmp = `${STUDENT_PROGRESS_PATH}.tmp`;
+    await fs.promises.writeFile(tmp, JSON.stringify(store, null, 2), "utf-8");
+    await fs.promises.rename(tmp, STUDENT_PROGRESS_PATH);
+  });
+
+  return studentProgressWriteQueue;
+}
+
+async function appendStudentProgressEvent(event: ProgressEvent) {
+  const store = loadStudentProgress();
+  store.events.push(event);
+  await saveStudentProgress(store);
+}
+
+function toIsoNow() {
+  return new Date().toISOString();
+}
+
+function makeProgressEventId() {
+  return `evt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+app.post("/api/progress/event", async (req, res) => {
+  try {
+    const body = req.body ?? {};
+
+    const userId = Number(body.userId);
+    const username = String(body.username ?? "").trim();
+    const teacher = body.teacher === true;
+    const bookId = String(body.bookId ?? "").trim();
+    const bookTitle = String(body.bookTitle ?? "").trim();
+    const partId = Number(body.partId);
+    const partLabel = String(body.partLabel ?? "").trim();
+    const eventType = String(body.eventType ?? "").trim() as ProgressEventType;
+
+    if (!Number.isInteger(userId)) {
+      return res.status(400).json({ error: "Invalid userId." });
+    }
+    if (!username) {
+      return res.status(400).json({ error: "Missing username." });
+    }
+    if (!bookId) {
+      return res.status(400).json({ error: "Missing bookId." });
+    }
+    if (!bookTitle) {
+      return res.status(400).json({ error: "Missing bookTitle." });
+    }
+    if (!Number.isInteger(partId)) {
+      return res.status(400).json({ error: "Invalid partId." });
+    }
+    if (!partLabel) {
+      return res.status(400).json({ error: "Missing partLabel." });
+    }
+    if (
+      !["listen", "record_start", "record_stop", "analysis"].includes(eventType)
+    ) {
+      return res.status(400).json({ error: "Invalid eventType." });
+    }
+
+    const event: ProgressEvent = {
+      id: makeProgressEventId(),
+      timestamp: toIsoNow(),
+      userId,
+      username,
+      teacher,
+      bookId,
+      bookTitle,
+      partId,
+      partLabel,
+      eventType,
+      payload: body.payload && typeof body.payload === "object" ? body.payload : {},
+    };
+
+    await appendStudentProgressEvent(event);
+    return res.json({ ok: true, event });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to save progress event." });
+  }
+});
+
+app.get("/api/progress/events", requireTeacher, (req, res) => {
+  try {
+    const store = loadStudentProgress();
+
+    const userId =
+      req.query.userId != null ? Number(req.query.userId) : undefined;
+    const bookId =
+      typeof req.query.bookId === "string" ? req.query.bookId.trim() : undefined;
+    const partId =
+      req.query.partId != null ? Number(req.query.partId) : undefined;
+
+    let events = store.events.slice();
+
+    if (Number.isInteger(userId)) {
+      events = events.filter((e) => e.userId === userId);
+    }
+    if (bookId) {
+      events = events.filter((e) => e.bookId === bookId);
+    }
+    if (Number.isInteger(partId)) {
+      events = events.filter((e) => e.partId === partId);
+    }
+
+    events.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+    return res.json({ events });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to load progress events." });
+  }
+});
+
+app.get("/api/progress/summary", requireTeacher, (req, res) => {
+  try {
+    const store = loadStudentProgress();
+    const events = store.events;
+
+    const byUser = new Map<
+      number,
+      {
+        userId: number;
+        username: string;
+        listens: number;
+        recordings: number;
+        analyses: number;
+        lastActivityAt: string | null;
+        latestScorePercent: number | null;
+        averageScorePercent: number | null;
+      }
+    >();
+
+    for (const e of events) {
+      if (e.teacher) continue;
+
+      if (!byUser.has(e.userId)) {
+        byUser.set(e.userId, {
+          userId: e.userId,
+          username: e.username,
+          listens: 0,
+          recordings: 0,
+          analyses: 0,
+          lastActivityAt: null,
+          latestScorePercent: null,
+          averageScorePercent: null,
+        });
+      }
+
+      const row = byUser.get(e.userId)!;
+
+      if (e.eventType === "listen") row.listens += 1;
+      if (e.eventType === "record_stop") row.recordings += 1;
+      if (e.eventType === "analysis") row.analyses += 1;
+
+      if (!row.lastActivityAt || e.timestamp > row.lastActivityAt) {
+        row.lastActivityAt = e.timestamp;
+      }
+    }
+
+    for (const row of byUser.values()) {
+      const analyses = events
+        .filter((e) => !e.teacher && e.userId === row.userId && e.eventType === "analysis")
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+      const scores = analyses
+        .map((e) => Number(e.payload?.scorePercent))
+        .filter((v) => Number.isFinite(v));
+
+      row.latestScorePercent = scores.length > 0 ? scores[0] : null;
+      row.averageScorePercent =
+        scores.length > 0
+          ? Number((scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1))
+          : null;
+    }
+
+    const students = Array.from(byUser.values()).sort((a, b) =>
+      (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? "")
+    );
+
+    return res.json({ students });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to load progress summary." });
+  }
+});
+
 /**
  * 1) Transcribe user audio using Audio API (/v1/audio/transcriptions)
  * Models include gpt-4o-transcribe and gpt-4o-mini-transcribe. :contentReference[oaicite:2]{index=2}
  */
 app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: "Missing audio file." });
+    if (!req.file) {
+      return res.status(400).json({ error: "Missing audio file." });
+    }
 
     const transcription = await client.audio.transcriptions.create({
       model: "gpt-4o-mini-transcribe",
-      language: "en", // ✅ force English
-      file: new File([req.file.buffer], req.file.originalname || "recording.webm", {
-        type: req.file.mimetype || "audio/webm",
-      }),
+      language: "en",
+      file: await toFile(
+        req.file.buffer,
+        req.file.originalname || "recording.webm",
+        {
+          type: req.file.mimetype || "audio/webm",
+        }
+      ),
     });
 
     return res.json({ text: transcription.text });

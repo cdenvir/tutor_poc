@@ -1,0 +1,73 @@
+{
+  "events": [
+    {
+      "id": "evt_1773578203494_6ww78cz1",
+      "timestamp": "2026-03-15T12:36:43.494Z",
+      "userId": 3,
+      "username": "student",
+      "teacher": false,
+      "bookId": "kipper-giant",
+      "bookTitle": "Kipper and the Giant",
+      "partId": 1,
+      "partLabel": "Part 1",
+      "eventType": "record_start",
+      "payload": {}
+    },
+    {
+      "id": "evt_1773578211718_wuy1ntlf",
+      "timestamp": "2026-03-15T12:36:51.718Z",
+      "userId": 3,
+      "username": "student",
+      "teacher": false,
+      "bookId": "kipper-giant",
+      "bookTitle": "Kipper and the Giant",
+      "partId": 1,
+      "partLabel": "Part 1",
+      "eventType": "record_stop",
+      "payload": {
+        "durationSec": 8.2
+      }
+    },
+    {
+      "id": "evt_1773578251275_gplyozlj",
+      "timestamp": "2026-03-15T12:37:31.275Z",
+      "userId": 3,
+      "username": "student",
+      "teacher": false,
+      "bookId": "kipper-giant",
+      "bookTitle": "Kipper and the Giant",
+      "partId": 1,
+      "partLabel": "Part 1",
+      "eventType": "analysis",
+      "payload": {
+        "scorePercent": 23.44,
+        "summary": "Two substitutions of the name 'Kipper' -> 'Cooper' (indices 0 and 4). The student read correctly through index 16, then omitted the remainder of the passage (indices 17–63).",
+        "originalText": "Kipper and the Giant. Kipper was watching Television. He was watching a program called The Angry Giant. He liked it. An angry giant lived in a castle near a village. Nobody liked him. He was always cross. When the giant was cross, he would stamp his feet and the houses would shake. \"Oh No!\" Everyone said. The giant is cross again. He's always cross.",
+        "transcribedText": "Cooper and the Giant Cooper was watching television. He was watching a program called The Angry Giant.",
+        "mistakes": [
+          {
+            "startIndex": 0,
+            "endIndex": 0,
+            "expected": "Kipper",
+            "heard": "Cooper",
+            "kind": "substitution"
+          },
+          {
+            "startIndex": 4,
+            "endIndex": 4,
+            "expected": "Kipper",
+            "heard": "Cooper",
+            "kind": "substitution"
+          },
+          {
+            "startIndex": 17,
+            "endIndex": 63,
+            "expected": "He liked it. An angry giant lived in a castle near a village. Nobody liked him. He was always cross. When the giant was cross, he would stamp his feet and the houses would shake. \"Oh No!\" Everyone said. The giant is cross again. He's always cross.",
+            "heard": "",
+            "kind": "missing"
+          }
+        ]
+      }
+    }
+  ]
+}

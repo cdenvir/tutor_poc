@@ -195,3 +195,9 @@ select.echoInput option {
   color: rgba(255, 255, 255, 0.9);
   background: #111827;
 }
+
+pre,
+code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

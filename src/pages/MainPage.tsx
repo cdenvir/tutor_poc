@@ -32,7 +32,7 @@ export default function MainPage() {
 
         const j = await res.json();
         if (!cancelled) {
-          setBooks(j.books ?? []);
+          setBooks((j.books ?? []) as Book[]);
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -62,10 +62,9 @@ export default function MainPage() {
     return encodePath(`/media/books/${activeBook.folder}/${activePart.base}`);
   }, [activeBook, activePart]);
 
-  const displayName =
-    user?.englishName?.trim()
-      ? `${user.firstName} (${user.englishName}) ${user.lastName}`
-      : `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim();
+  const displayName = user?.englishName?.trim()
+    ? `${user.firstName} (${user.englishName}) ${user.lastName}`
+    : `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim();
 
   const logout = () => {
     clearUser();
@@ -83,7 +82,7 @@ export default function MainPage() {
             <div>
               <div className="title">Echo</div>
               <div className="subtitle">
-                {(user.teacher ? "Teacher" : "Student")} • {displayName}
+                {user.teacher ? "Teacher" : "Student"} • {displayName}
                 {activeBook ? ` • ${activeBook.title}` : ""}
                 {activePart ? ` • ${activePart.label}` : ""}
               </div>
@@ -91,16 +90,18 @@ export default function MainPage() {
           </div>
 
           <div className="row">
-            <Link className="btn" to="/books">← Book Selection</Link>
-            <span className="badge">Main Page</span>
+            <Link to="/books" className="btn">← Book Selection</Link>
+            <Link to="/" className="btn">Main Page</Link>
             <button className="btn" onClick={logout}>Logout</button>
           </div>
         </div>
 
         {err && (
-          <div className="card">
+          <div className="card" style={{ marginBottom: 16 }}>
             <div className="cardBody">
-              <div className="muted">⚠ {err}</div>
+              <div className="badge" style={{ color: "#fca5a5" }}>
+                ⚠ {err}
+              </div>
             </div>
           </div>
         )}
@@ -108,17 +109,33 @@ export default function MainPage() {
         {!err && (!activeBook || !activePart || !basePath) && (
           <div className="card">
             <div className="cardBody">
-              <div className="muted">
+              <div className="badge" style={{ color: "#fca5a5" }}>
                 ⚠ Could not resolve the selected book/part.
               </div>
-              <div className="muted" style={{ marginTop: 8 }}>
-                Go back to <Link to="/books">Book Selection</Link>.
+
+              <div style={{ marginTop: 12 }}>
+                <Link to="/books" className="btn">Go back to Book Selection</Link>
               </div>
             </div>
           </div>
         )}
 
-        {!err && basePath && <ReaderPanel basePath={basePath} />}
+        {!err && basePath && activeBook && activePart && (
+          <ReaderPanel
+            basePath={basePath}
+            trackingContext={{
+              user,
+              book: {
+                id: activeBook.id,
+                title: activeBook.title,
+              },
+              part: {
+                id: activePart.id,
+                label: activePart.label,
+              },
+            }}
+          />
+        )}
       </div>
     </div>
   );

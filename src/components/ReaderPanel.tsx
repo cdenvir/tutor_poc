@@ -11,6 +11,27 @@ type AnalysisMistake = {
   kind: "missing" | "substitution" | "extra" | "reorder" | "unclear";
 };
 
+type TrackingContext = {
+  user: {
+    id: number;
+    username: string;
+    teacher: boolean;
+  };
+  book: {
+    id: string;
+    title: string;
+  };
+  part: {
+    id: number;
+    label: string;
+  };
+};
+
+type ReaderPanelProps = {
+  basePath: string;
+  trackingContext: TrackingContext;
+};
+
 type AnalysisResult = {
   scorePercent: number;
   summary: string;
@@ -25,7 +46,9 @@ function parseVttTimestamp(ts: string): number {
   const parts = ts.trim().split(":");
   if (parts.length < 2 || parts.length > 3) return 0;
 
-  let h = 0, m = 0, sMs = "";
+  let h = 0,
+    m = 0,
+    sMs = "";
   if (parts.length === 3) {
     h = Number(parts[0]) || 0;
     m = Number(parts[1]) || 0;
@@ -98,10 +121,13 @@ function tokenizeWords(s: string): string[] {
   return s.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
 }
 
-export default function ReaderPanel({ basePath }: { basePath: string }) {
-const audioSrc = useMemo(() => `${basePath}.mp3`, [basePath]);
-const textSrc  = useMemo(() => `${basePath}.txt`, [basePath]);
-const vttSrc   = useMemo(() => `${basePath}.vtt`, [basePath]);
+export default function ReaderPanel({
+  basePath,
+  trackingContext,
+}: ReaderPanelProps) {
+  const audioSrc = useMemo(() => `${basePath}.mp3`, [basePath]);
+  const textSrc = useMemo(() => `${basePath}.txt`, [basePath]);
+  const vttSrc = useMemo(() => `${basePath}.vtt`, [basePath]);
 
   const [text, setText] = useState<string>("Loading text…");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -109,7 +135,6 @@ const vttSrc   = useMemo(() => `${basePath}.vtt`, [basePath]);
   const [cues, setCues] = useState<VttCue[]>([]);
   const [activeCueIndex, setActiveCueIndex] = useState<number>(-1);
 
-  // Sync controls (persisted)
   const [syncOffsetSec, setSyncOffsetSec] = useState<number>(() => {
     const v = localStorage.getItem("echo_sync_offset_sec");
     return v ? Number(v) : 0;
@@ -119,55 +144,21 @@ const vttSrc   = useMemo(() => `${basePath}.vtt`, [basePath]);
     return v ? Number(v) : 1;
   });
 
-  // --- NEW: dictionary popup state ---
-const [dictOpen, setDictOpen] = useState(false);
-const [dictLoading, setDictLoading] = useState(false);
-const [dictError, setDictError] = useState<string | null>(null);
-const [dictWord, setDictWord] = useState<string>("");
-const [dictResult, setDictResult] = useState<{
-  word: string;
-  definition_ko: string;
-  example_en: string;
-  example_ko: string;
-} | null>(null);
-
-const pickWordFromDoubleClick = (text: string) => {
-  // best-effort: single word, strip punctuation around it
-  return text.trim().replace(/^[^A-Za-z']+|[^A-Za-z']+$/g, "");
-};
-
-const openDefinition = async (raw: string) => {
-  const w = pickWordFromDoubleClick(raw);
-  if (!w) return;
-
-  setDictOpen(true);
-  setDictLoading(true);
-  setDictError(null);
-  setDictResult(null);
-  setDictWord(w);
-
-  try {
-    const r = await fetch("/api/define", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ word: w }),
-    });
-    if (!r.ok) throw new Error("define failed");
-    const j = await r.json();
-    setDictResult(j);
-  } catch {
-    setDictError("Could not fetch definition. Check backend console.");
-  } finally {
-    setDictLoading(false);
-  }
-};
-
-  useEffect(() => localStorage.setItem("echo_sync_offset_sec", String(syncOffsetSec)), [syncOffsetSec]);
-  useEffect(() => localStorage.setItem("echo_sync_scale", String(syncScale)), [syncScale]);
+  const [dictOpen, setDictOpen] = useState(false);
+  const [dictLoading, setDictLoading] = useState(false);
+  const [dictError, setDictError] = useState<string | null>(null);
+  const [dictWord, setDictWord] = useState<string>("");
+  const [dictResult, setDictResult] = useState<{
+    word: string;
+    definition_ko: string;
+    example_en: string;
+    example_ko: string;
+  } | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const recordStartTimeRef = useRef<number | null>(null);
+  const listenLoggedRef = useRef(false);
 
-  // Recording
   const [recState, setRecState] = useState<RecorderState>("idle");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -175,7 +166,6 @@ const openDefinition = async (raw: string) => {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recError, setRecError] = useState<string | null>(null);
 
-  // Analyze UI state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [transcript, setTranscript] = useState<string>("");
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -183,7 +173,69 @@ const openDefinition = async (raw: string) => {
 
   const originalWords = useMemo(() => tokenizeWords(text), [text]);
 
-  // Load TXT
+  const trackEvent = async (
+    eventType: "listen" | "record_start" | "record_stop" | "analysis",
+    payload?: Record<string, unknown>
+  ) => {
+    try {
+      await fetch("/api/progress/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: trackingContext.user.id,
+          username: trackingContext.user.username,
+          teacher: trackingContext.user.teacher,
+          bookId: trackingContext.book.id,
+          bookTitle: trackingContext.book.title,
+          partId: trackingContext.part.id,
+          partLabel: trackingContext.part.label,
+          eventType,
+          payload: payload ?? {},
+        }),
+      });
+    } catch {
+      // non-blocking
+    }
+  };
+
+  const pickWordFromDoubleClick = (text: string) => {
+    return text.trim().replace(/^[^A-Za-z']+|[^A-Za-z']+$/g, "");
+  };
+
+  const openDefinition = async (raw: string) => {
+    const w = pickWordFromDoubleClick(raw);
+    if (!w) return;
+
+    setDictOpen(true);
+    setDictLoading(true);
+    setDictError(null);
+    setDictResult(null);
+    setDictWord(w);
+
+    try {
+      const r = await fetch("/api/define", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: w }),
+      });
+      if (!r.ok) throw new Error("define failed");
+      const j = await r.json();
+      setDictResult(j);
+    } catch {
+      setDictError("Could not fetch definition. Check backend console.");
+    } finally {
+      setDictLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    localStorage.setItem("echo_sync_offset_sec", String(syncOffsetSec));
+  }, [syncOffsetSec]);
+
+  useEffect(() => {
+    localStorage.setItem("echo_sync_scale", String(syncScale));
+  }, [syncScale]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -193,13 +245,16 @@ const openDefinition = async (raw: string) => {
         const t = await res.text();
         if (!cancelled) setText(t);
       } catch {
-        if (!cancelled) setText("Could not load the .txt file. Check public/media/.");
+        if (!cancelled) {
+          setText("Could not load the .txt file. Check public/media/.");
+        }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [textSrc]);
 
-  // Load VTT
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -213,10 +268,11 @@ const openDefinition = async (raw: string) => {
         if (!cancelled) setCues([]);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [vttSrc]);
 
-  // Audio highlight via cues + offset/scale
   useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -226,6 +282,7 @@ const openDefinition = async (raw: string) => {
     const onEnded = () => {
       setIsPlaying(false);
       setActiveCueIndex(-1);
+      listenLoggedRef.current = false;
     };
 
     const onTimeUpdate = () => {
@@ -269,9 +326,18 @@ const openDefinition = async (raw: string) => {
   const togglePlay = async () => {
     const a = audioRef.current;
     if (!a) return;
+
     try {
-      if (a.paused) await a.play();
-      else a.pause();
+      if (a.paused) {
+        await a.play();
+
+        if (!listenLoggedRef.current) {
+          listenLoggedRef.current = true;
+          void trackEvent("listen", { source: "story-audio" });
+        }
+      } else {
+        a.pause();
+      }
     } catch {}
   };
 
@@ -284,7 +350,6 @@ const openDefinition = async (raw: string) => {
     setSyncScale(1);
   };
 
-  // Recording
   const startRecording = async () => {
     setRecError(null);
     setAnalysis(null);
@@ -298,10 +363,19 @@ const openDefinition = async (raw: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const preferredTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
-      const mimeType = preferredTypes.find((t) => MediaRecorder.isTypeSupported(t));
+      const preferredTypes = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+      ];
+      const mimeType = preferredTypes.find((t) =>
+        MediaRecorder.isTypeSupported(t)
+      );
 
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const mr = new MediaRecorder(
+        stream,
+        mimeType ? { mimeType } : undefined
+      );
       chunksRef.current = [];
 
       mr.ondataavailable = (ev) => {
@@ -311,16 +385,28 @@ const openDefinition = async (raw: string) => {
       mr.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
 
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
+        const blob = new Blob(chunksRef.current, {
+          type: mr.mimeType || "audio/webm",
+        });
         const url = URL.createObjectURL(blob);
         setRecordedBlob(blob);
         setRecordedUrl(url);
         setRecState("stopped");
+
+        const startedAt = recordStartTimeRef.current;
+        const durationSec =
+          startedAt != null
+            ? Number(((Date.now() - startedAt) / 1000).toFixed(1))
+            : undefined;
+
+        void trackEvent("record_stop", { durationSec });
       };
 
       mr.start();
       mediaRecorderRef.current = mr;
       setRecState("recording");
+      recordStartTimeRef.current = Date.now();
+      void trackEvent("record_start");
     } catch (e: any) {
       setRecError(
         e?.name === "NotAllowedError"
@@ -337,7 +423,6 @@ const openDefinition = async (raw: string) => {
     mediaRecorderRef.current = null;
   };
 
-  // NEW: Analyze flow
   const analyzeRecording = async () => {
     if (!recordedBlob) return;
 
@@ -346,7 +431,6 @@ const openDefinition = async (raw: string) => {
     setAnalysis(null);
 
     try {
-      // 1) Transcribe
       const fd = new FormData();
       fd.append("audio", recordedBlob, "recording.webm");
 
@@ -356,7 +440,6 @@ const openDefinition = async (raw: string) => {
       const tText = String(tJson.text || "");
       setTranscript(tText);
 
-      // 2) Analyze/diff
       const aRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -364,15 +447,25 @@ const openDefinition = async (raw: string) => {
       });
       if (!aRes.ok) throw new Error("Analyze failed");
       const aJson = await aRes.json();
-      setAnalysis(aJson.analysis as AnalysisResult);
-    } catch (e: any) {
-      setAnalysisError("Analysis failed. Check the backend console + OPENAI_API_KEY.");
+      const analysisResult = aJson.analysis as AnalysisResult;
+      setAnalysis(analysisResult);
+
+      void trackEvent("analysis", {
+        scorePercent: analysisResult.scorePercent,
+        summary: analysisResult.summary,
+        originalText: text,
+        transcribedText: tText,
+        mistakes: analysisResult.mistakes,
+      });
+    } catch {
+      setAnalysisError(
+        "Analysis failed. Check the backend console + OPENAI_API_KEY."
+      );
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  // Render original text with mistake highlights (by word index span)
   const mistakeMap = useMemo(() => {
     const map = new Map<number, AnalysisMistake>();
     if (!analysis) return map;
@@ -396,15 +489,27 @@ const openDefinition = async (raw: string) => {
           </button>
           <span className="badge">Story audio</span>
           <span className="badge">
-            Sync: {syncOffsetSec >= 0 ? `+${syncOffsetSec.toFixed(2)}` : syncOffsetSec.toFixed(2)}s, ×{syncScale.toFixed(3)}
+            Sync:{" "}
+            {syncOffsetSec >= 0
+              ? `+${syncOffsetSec.toFixed(2)}`
+              : syncOffsetSec.toFixed(2)}
+            s, ×{syncScale.toFixed(3)}
           </span>
         </div>
 
         <div className="row">
-          <button className="btn" onClick={() => nudgeOffset(-0.25)} title="Highlight earlier">
+          <button
+            className="btn"
+            onClick={() => nudgeOffset(-0.25)}
+            title="Highlight earlier"
+          >
             ◀︎ -0.25s
           </button>
-          <button className="btn" onClick={() => nudgeOffset(+0.25)} title="Highlight later">
+          <button
+            className="btn"
+            onClick={() => nudgeOffset(+0.25)}
+            title="Highlight later"
+          >
             +0.25s ▶︎
           </button>
           <button className="btn" onClick={resetSync} title="Reset sync values">
@@ -417,16 +522,16 @@ const openDefinition = async (raw: string) => {
         <div className="textPanel" aria-label="Story text">
           {hasVtt ? (
             cues.map((c, i) => (
-            <span
-              key={i}
-              id={`cue-${i}`}
-              className={`word ${i === activeCueIndex ? "wordActive" : ""}`}
-              onDoubleClick={() => openDefinition(c.text)}
-              style={{ cursor: "pointer" }}
-              title="Double-click for Korean definition"
-            >
-              {c.text}{" "}
-            </span>
+              <span
+                key={i}
+                id={`cue-${i}`}
+                className={`word ${i === activeCueIndex ? "wordActive" : ""}`}
+                onDoubleClick={() => openDefinition(c.text)}
+                style={{ cursor: "pointer" }}
+                title="Double-click for Korean definition"
+              >
+                {c.text}{" "}
+              </span>
             ))
           ) : (
             <span className="muted">{text}</span>
@@ -439,7 +544,9 @@ const openDefinition = async (raw: string) => {
 
         <div className="row" style={{ justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Record your reading</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>
+              Record your reading
+            </div>
             <div className="muted">Record, stop, replay — then analyze.</div>
           </div>
 
@@ -468,11 +575,19 @@ const openDefinition = async (raw: string) => {
             <audio controls src={recordedUrl} />
 
             <div className="row" style={{ marginTop: 10 }}>
-              <button className="btn btnPrimary" onClick={analyzeRecording} disabled={isAnalyzing}>
+              <button
+                className="btn btnPrimary"
+                onClick={analyzeRecording}
+                disabled={isAnalyzing}
+              >
                 {isAnalyzing ? "Analyzing…" : "Analyze recording"}
               </button>
               {transcript && <span className="badge">Transcript ready</span>}
-              {analysis && <span className="badge">Score: {analysis.scorePercent.toFixed(0)}%</span>}
+              {analysis && (
+                <span className="badge">
+                  Score: {analysis.scorePercent.toFixed(0)}%
+                </span>
+              )}
             </div>
 
             {analysisError && (
@@ -483,7 +598,9 @@ const openDefinition = async (raw: string) => {
 
             {transcript && (
               <div style={{ marginTop: 12 }}>
-                <div className="muted" style={{ marginBottom: 6 }}>Transcript (what you said)</div>
+                <div className="muted" style={{ marginBottom: 6 }}>
+                  Transcript (what you said)
+                </div>
                 <div className="textPanel" style={{ maxHeight: 140, fontSize: 14 }}>
                   {transcript}
                 </div>
@@ -499,26 +616,36 @@ const openDefinition = async (raw: string) => {
                 <div className="textPanel" style={{ maxHeight: 220 }}>
                   {originalWords.map((w, idx) => {
                     const m = mistakeMap.get(idx);
-                    const bg =
-                      !m ? "" :
-                      m.kind === "missing" ? "rgba(239,68,68,0.18)" :
-                      m.kind === "substitution" ? "rgba(245,158,11,0.18)" :
-                      m.kind === "extra" ? "rgba(59,130,246,0.18)" :
-                      "rgba(168,85,247,0.18)";
+                    const bg = !m
+                      ? ""
+                      : m.kind === "missing"
+                      ? "rgba(239,68,68,0.18)"
+                      : m.kind === "substitution"
+                      ? "rgba(245,158,11,0.18)"
+                      : m.kind === "extra"
+                      ? "rgba(59,130,246,0.18)"
+                      : "rgba(168,85,247,0.18)";
 
-                    const outline =
-                      !m ? "" :
-                      m.kind === "missing" ? "1px solid rgba(239,68,68,0.35)" :
-                      m.kind === "substitution" ? "1px solid rgba(245,158,11,0.35)" :
-                      m.kind === "extra" ? "1px solid rgba(59,130,246,0.35)" :
-                      "1px solid rgba(168,85,247,0.35)";
+                    const outline = !m
+                      ? ""
+                      : m.kind === "missing"
+                      ? "1px solid rgba(239,68,68,0.35)"
+                      : m.kind === "substitution"
+                      ? "1px solid rgba(245,158,11,0.35)"
+                      : m.kind === "extra"
+                      ? "1px solid rgba(59,130,246,0.35)"
+                      : "1px solid rgba(168,85,247,0.35)";
 
                     return (
                       <span
                         key={idx}
                         className="word"
-                        title={m ? `${m.kind}: expected "${m.expected}" heard "${m.heard}"` : ""}
-                        style={m ? { background: bg, outline, outlineOffset: 0 } : undefined}
+                        title={
+                          m ? `${m.kind}: expected "${m.expected}" heard "${m.heard}"` : ""
+                        }
+                        style={
+                          m ? { background: bg, outline, outlineOffset: 0 } : undefined
+                        }
                       >
                         {w}{" "}
                       </span>
@@ -536,7 +663,8 @@ const openDefinition = async (raw: string) => {
                     <ul style={{ marginTop: 6 }}>
                       {analysis.mistakes.slice(0, 12).map((m, i) => (
                         <li key={i}>
-                          <b>{m.kind}</b> ({m.startIndex}-{m.endIndex}) expected “{m.expected}” heard “{m.heard}”
+                          <b>{m.kind}</b> ({m.startIndex}-{m.endIndex}) expected “
+                          {m.expected}” heard “{m.heard}”
                         </li>
                       ))}
                     </ul>
@@ -548,72 +676,83 @@ const openDefinition = async (raw: string) => {
         )}
 
         <div style={{ marginTop: 12 }} className="muted">
-{dictOpen && (
-  <div
-    onClick={() => setDictOpen(false)}
-    style={{
-      position: "fixed",
-      inset: 0,
-      background: "rgba(0,0,0,0.55)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 16,
-      zIndex: 9999,
-    }}
-  >
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        width: "min(720px, 100%)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        background: "rgba(15, 18, 28, 0.96)",
-        borderRadius: 16,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
-        padding: 16,
-      }}
-    >
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ fontWeight: 800, fontSize: 18 }}>
-          Echo • 단어 뜻
-        </div>
-        <button className="btn" onClick={() => setDictOpen(false)}>Close</button>
-      </div>
+          {dictOpen && (
+            <div
+              onClick={() => setDictOpen(false)}
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.55)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 16,
+                zIndex: 9999,
+              }}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "min(720px, 100%)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(15, 18, 28, 0.96)",
+                  borderRadius: 16,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+                  padding: 16,
+                }}
+              >
+                <div
+                  className="row"
+                  style={{ justifyContent: "space-between", marginBottom: 10 }}
+                >
+                  <div style={{ fontWeight: 800, fontSize: 18 }}>
+                    Echo • 단어 뜻
+                  </div>
+                  <button className="btn" onClick={() => setDictOpen(false)}>
+                    Close
+                  </button>
+                </div>
 
-      <div className="badge" style={{ marginBottom: 10 }}>
-        Word: {dictWord}
-      </div>
+                <div className="badge" style={{ marginBottom: 10 }}>
+                  Word: {dictWord}
+                </div>
 
-      {dictLoading && <div className="muted">Looking up definition…</div>}
-      {dictError && <div className="muted">⚠ {dictError}</div>}
+                {dictLoading && <div className="muted">Looking up definition…</div>}
+                {dictError && <div className="muted">⚠ {dictError}</div>}
 
-      {dictResult && (
-        <div style={{ display: "grid", gap: 10 }}>
-          <div>
-            <div className="muted" style={{ marginBottom: 4 }}>뜻 (Korean definition)</div>
-            <div className="textPanel" style={{ maxHeight: 120, fontSize: 15 }}>
-              {dictResult.definition_ko}
+                {dictResult && (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div>
+                      <div className="muted" style={{ marginBottom: 4 }}>
+                        뜻 (Korean definition)
+                      </div>
+                      <div className="textPanel" style={{ maxHeight: 120, fontSize: 15 }}>
+                        {dictResult.definition_ko}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="muted" style={{ marginBottom: 4 }}>
+                        Example (EN)
+                      </div>
+                      <div className="textPanel" style={{ maxHeight: 120, fontSize: 15 }}>
+                        {dictResult.example_en}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="muted" style={{ marginBottom: 4 }}>
+                        예문 (KO)
+                      </div>
+                      <div className="textPanel" style={{ maxHeight: 120, fontSize: 15 }}>
+                        {dictResult.example_ko}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-
-          <div>
-            <div className="muted" style={{ marginBottom: 4 }}>Example (EN)</div>
-            <div className="textPanel" style={{ maxHeight: 120, fontSize: 15 }}>
-              {dictResult.example_en}
-            </div>
-          </div>
-
-          <div>
-            <div className="muted" style={{ marginBottom: 4 }}>예문 (KO)</div>
-            <div className="textPanel" style={{ maxHeight: 120, fontSize: 15 }}>
-              {dictResult.example_ko}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  </div>
-)}
+          )}
           Note: this uses your local backend so your API key stays off the browser.
         </div>
       </div>

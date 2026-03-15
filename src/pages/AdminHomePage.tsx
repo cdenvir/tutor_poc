@@ -51,9 +51,10 @@ export default function AdminHomePage() {
     {
       title: "Student Progress",
       description: "Review reading attempts, scores and progress history for individual students.",
-      actionLabel: "Coming Soon",
-      disabled: true,
-      soon: true,
+      actionLabel: "Open",
+      onClick: () => navigate("/admin/student-progress"),
+      disabled: false,
+      soon: false,
     },
     {
       title: "Teacher Analytics",
