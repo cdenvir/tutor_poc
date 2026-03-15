@@ -14,8 +14,13 @@ type UserForm = {
   englishName: string;
 };
 
+type EditorMode = "create" | "edit";
+
 function teacherHeaders(extra?: Record<string, string>) {
-  return { "x-echo-teacher": "true", ...(extra ?? {}) };
+  return {
+    "x-echo-teacher": "true",
+    ...(extra ?? {}),
+  };
 }
 
 function emptyForm(): UserForm {
@@ -47,6 +52,7 @@ async function apiGetUsers(): Promise<UserRecord[]> {
     cache: "no-store",
     headers: teacherHeaders(),
   });
+
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || "Failed to load users.");
   return (j.users ?? []) as UserRecord[];
@@ -58,8 +64,11 @@ export default function AdminUserManagement() {
 
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [activeUserId, setActiveUserId] = useState<number | null>(null);
+  const [mode, setMode] = useState<EditorMode>("edit");
+
   const [createForm, setCreateForm] = useState<UserForm>(emptyForm());
   const [editForm, setEditForm] = useState<UserForm>(emptyForm());
+
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -94,10 +103,13 @@ export default function AdminUserManagement() {
   useEffect(() => {
     if (activeUser) {
       setEditForm(formFromUser(activeUser));
+      if (mode !== "create") {
+        setMode("edit");
+      }
     } else {
       setEditForm(emptyForm());
     }
-  }, [activeUser]);
+  }, [activeUser, mode]);
 
   const logout = () => {
     clearUser();
@@ -110,6 +122,20 @@ export default function AdminUserManagement() {
 
   const setEditField = <K extends keyof UserForm>(key: K, value: UserForm[K]) => {
     setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSelectUser = (userId: number) => {
+    setActiveUserId(userId);
+    setMode("edit");
+    setErr(null);
+    setMsg(null);
+  };
+
+  const handleStartCreate = () => {
+    setMode("create");
+    setCreateForm(emptyForm());
+    setErr(null);
+    setMsg(null);
   };
 
   const handleCreate = async () => {
@@ -138,6 +164,7 @@ export default function AdminUserManagement() {
       const created = j.user as UserRecord;
       setCreateForm(emptyForm());
       setMsg(`Created user #${created.id} (${created.username}).`);
+      setMode("edit");
       await reload(created.id);
     } catch (e: any) {
       setErr(e?.message || "Failed to create user.");
@@ -172,7 +199,6 @@ export default function AdminUserManagement() {
       if (!r.ok) throw new Error(j.error || "Failed to update user.");
 
       const updated = j.user as UserRecord;
-
       if (loggedInUser?.id === updated.id) {
         setUser(updated);
       }
@@ -234,18 +260,18 @@ export default function AdminUserManagement() {
                 <div className="subtitle">User Management</div>
               </div>
             </div>
+
             <div className="row">
-              <Link className="btn" to="/books">
-                ← Book Selection
-              </Link>
-              <button className="btn" onClick={logout}>
-                Logout
-              </button>
+              <Link to="/books" className="btn">← Book Selection</Link>
+              <button className="btn" onClick={logout}>Logout</button>
             </div>
           </div>
+
           <div className="card">
             <div className="cardBody">
-              <div className="muted">⚠ Teacher access required.</div>
+              <div className="badge" style={{ color: "#fca5a5" }}>
+                ⚠ Teacher access required.
+              </div>
             </div>
           </div>
         </div>
@@ -261,71 +287,77 @@ export default function AdminUserManagement() {
     submitClassName = "btn btnPrimary"
   ) => (
     <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-        <Field label="Username *">
-          <input
-            value={form.username}
-            onChange={(e) => setField("username", e.target.value)}
-            className="echoInput"
-          />
-        </Field>
+      <Field label="Username">
+        <input
+          value={form.username}
+          onChange={(e) => setField("username", e.target.value)}
+          className="echoInput"
+        />
+      </Field>
 
-        <Field label="English Name">
-          <input
-            value={form.englishName}
-            onChange={(e) => setField("englishName", e.target.value)}
-            className="echoInput"
-          />
-        </Field>
+      <Field label="English Name">
+        <input
+          value={form.englishName}
+          onChange={(e) => setField("englishName", e.target.value)}
+          className="echoInput"
+        />
+      </Field>
 
-        <Field label="First Name *">
-          <input
-            value={form.firstName}
-            onChange={(e) => setField("firstName", e.target.value)}
-            className="echoInput"
-          />
-        </Field>
+      <Field label="First Name">
+        <input
+          value={form.firstName}
+          onChange={(e) => setField("firstName", e.target.value)}
+          className="echoInput"
+        />
+      </Field>
 
-        <Field label="Last Name *">
-          <input
-            value={form.lastName}
-            onChange={(e) => setField("lastName", e.target.value)}
-            className="echoInput"
-          />
-        </Field>
+      <Field label="Last Name">
+        <input
+          value={form.lastName}
+          onChange={(e) => setField("lastName", e.target.value)}
+          className="echoInput"
+        />
+      </Field>
 
-        <Field label="Gender *">
-          <select
-            value={form.gender}
-            onChange={(e) => setField("gender", e.target.value as Gender)}
-            className="echoInput"
-          >
-            <option value="M">M</option>
-            <option value="F">F</option>
-            <option value="X">X</option>
-          </select>
-        </Field>
+      <Field label="Gender">
+        <select
+          value={form.gender}
+          onChange={(e) => setField("gender", e.target.value as Gender)}
+          className="echoInput"
+        >
+          <option value="M">M</option>
+          <option value="F">F</option>
+          <option value="X">X</option>
+        </select>
+      </Field>
 
-        <Field label="Year Of Birth *">
-          <input
-            type="number"
-            value={form.yearOfBirth}
-            onChange={(e) => setField("yearOfBirth", e.target.value)}
-            className="echoInput"
-          />
-        </Field>
-      </div>
+      <Field label="Year of Birth">
+        <input
+          value={form.yearOfBirth}
+          onChange={(e) => setField("yearOfBirth", e.target.value)}
+          className="echoInput"
+          inputMode="numeric"
+        />
+      </Field>
 
-      <label className="row" style={{ gap: 8 }}>
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          fontSize: 14,
+          color: "rgba(255,255,255,0.9)",
+        }}
+      >
         <input
           type="checkbox"
           checked={form.teacher}
           onChange={(e) => setField("teacher", e.target.checked)}
         />
-        <span className="muted" style={{ fontSize: 14 }}>Teacher</span>
+        Teacher
       </label>
 
-      <div className="row">
+      <div className="row" style={{ justifyContent: "flex-end", marginTop: 4 }}>
         <button className={submitClassName} onClick={onSubmit} disabled={busy}>
           {submitLabel}
         </button>
@@ -335,7 +367,7 @@ export default function AdminUserManagement() {
 
   return (
     <div className="container">
-      <div className="shell">
+      <div className="shell" style={{ width: "min(1200px, 100%)" }}>
         <div className="header">
           <div className="brand">
             <div className="logoDot" />
@@ -346,23 +378,25 @@ export default function AdminUserManagement() {
           </div>
 
           <div className="row">
-            <Link className="btn" to="/admin">
-              ← Admin Home
-            </Link>
-            <Link className="btn" to="/books">
-              Book Selection
-            </Link>
-            <button className="btn" onClick={logout}>
-              Logout
-            </button>
+            <Link to="/admin" className="btn">← Admin Home</Link>
+            <Link to="/books" className="btn">Book Selection</Link>
+            <button className="btn" onClick={logout}>Logout</button>
           </div>
         </div>
 
         {(err || msg) && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="cardBody">
-              {err && <div className="muted">⚠ {err}</div>}
-              {!err && msg && <div className="muted">{msg}</div>}
+              {err && (
+                <div className="badge" style={{ color: "#fca5a5" }}>
+                  ⚠ {err}
+                </div>
+              )}
+              {!err && msg && (
+                <div className="badge" style={{ color: "#86efac" }}>
+                  {msg}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -370,79 +404,146 @@ export default function AdminUserManagement() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "320px minmax(0, 1fr)",
+            gridTemplateColumns: "340px minmax(0, 1fr)",
             gap: 16,
             alignItems: "start",
           }}
         >
           <div className="card">
             <div className="cardHeader">
-              <div style={{ fontWeight: 800 }}>Users</div>
-              <span className="badge">{users.length}</span>
+              <div>
+                <div style={{ fontWeight: 700 }}>Users</div>
+                <div className="subtitle">{users.length}</div>
+              </div>
+
+              <button className="btn btnPrimary" onClick={handleStartCreate}>
+                + New User
+              </button>
             </div>
-            <div className="cardBody" style={{ display: "grid", gap: 10 }}>
-              {users.map((u) => (
-                <button
-                  key={u.id}
-                  className="btn"
-                  onClick={() => setActiveUserId(u.id)}
-                  style={{
-                    textAlign: "left",
-                    justifyContent: "space-between",
-                    background:
-                      activeUserId === u.id
+
+            <div
+              className="cardBody"
+              style={{
+                display: "grid",
+                gap: 10,
+                maxHeight: 620,
+                overflow: "auto",
+              }}
+            >
+              {users.map((u) => {
+                const selected = mode === "edit" && activeUserId === u.id;
+
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    className="btn"
+                    onClick={() => handleSelectUser(u.id)}
+                    style={{
+                      textAlign: "left",
+                      justifyContent: "flex-start",
+                      padding: 12,
+                      background: selected
                         ? "linear-gradient(135deg, rgba(124,58,237,0.45), rgba(96,165,250,0.25))"
                         : undefined,
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700 }}>
-                      #{u.id} • {u.username}
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "space-between",
+                        gap: 12,
+                      }}
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            fontWeight: 700,
+                            lineHeight: 1.35,
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          #{u.id} • {u.username}
+                        </div>
+
+                        <div
+                          className="muted"
+                          style={{
+                            marginTop: 4,
+                            lineHeight: 1.4,
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {u.firstName} {u.lastName}
+                          {u.englishName ? ` • ${u.englishName}` : ""}
+                        </div>
+                      </div>
+
+                      <span
+                        className="badge"
+                        style={{
+                          flexShrink: 0,
+                          whiteSpace: "nowrap",
+                          alignSelf: "flex-start",
+                        }}
+                      >
+                        {u.teacher ? "Teacher" : "Student"}
+                      </span>
                     </div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {u.firstName} {u.lastName}
-                      {u.englishName ? ` • ${u.englishName}` : ""}
-                    </div>
-                  </div>
-                  <span className="badge">{u.teacher ? "Teacher" : "Student"}</span>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <div style={{ display: "grid", gap: 16 }}>
-            <div className="card">
-              <div className="cardHeader">
-                <div style={{ fontWeight: 800 }}>Add User</div>
-                <span className="muted">ID is auto-generated</span>
+          <div className="card">
+            <div className="cardHeader">
+              <div>
+                <div style={{ fontWeight: 700 }}>
+                  {mode === "create" ? "Add User" : "Edit User"}
+                </div>
+                <div className="subtitle">
+                  {mode === "create"
+                    ? "ID is auto-generated"
+                    : activeUser
+                    ? `Editing #${activeUser.id}`
+                    : "Select a user"}
+                </div>
               </div>
-              <div className="cardBody">
-                {renderForm(createForm, setCreateField, "Create User", handleCreate)}
-              </div>
+
+              {mode === "edit" && (
+                <button className="btn" onClick={handleStartCreate}>
+                  Add New Instead
+                </button>
+              )}
             </div>
 
-            <div className="card">
-              <div className="cardHeader">
-                <div style={{ fontWeight: 800 }}>Edit User</div>
-                <span className="muted">
-                  {activeUser ? `Editing #${activeUser.id}` : "Select a user"}
-                </span>
-              </div>
-              <div className="cardBody">
-                {!activeUser ? (
-                  <div className="muted">Select a user from the list to edit or delete.</div>
-                ) : (
-                  <>
-                    {renderForm(editForm, setEditField, "Save Changes", handleUpdate)}
-                    <div className="divider" />
-                    <div className="row">
-                      <button className="btn btnDanger" onClick={handleDelete} disabled={busy}>
-                        Delete User
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+            <div className="cardBody">
+              {mode === "create" ? (
+                renderForm(createForm, setCreateField, "Create User", handleCreate)
+              ) : !activeUser ? (
+                <div className="muted">
+                  Select a user from the list to edit or delete.
+                </div>
+              ) : (
+                <>
+                  {renderForm(editForm, setEditField, "Save Changes", handleUpdate)}
+
+                  <div className="divider" />
+
+                  <div className="row" style={{ justifyContent: "flex-end" }}>
+                    <button
+                      className="btn btnDanger"
+                      onClick={handleDelete}
+                      disabled={busy}
+                    >
+                      Delete User
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -459,8 +560,8 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <div className="muted" style={{ marginBottom: 6 }}>
+    <div style={{ display: "grid", gap: 6 }}>
+      <div className="subtitle" style={{ fontSize: 12, fontWeight: 700 }}>
         {label}
       </div>
       {children}
