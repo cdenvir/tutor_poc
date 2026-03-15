@@ -28,5 +28,14 @@
     "yearOfBirth": 2013,
     "teacher": false,
     "englishName": "Mary"
+  },
+  {
+    "id": 4,
+    "username": "student2",
+    "firstName": "Test",
+    "lastName": "Test",
+    "gender": "M",
+    "yearOfBirth": 1980,
+    "teacher": true
   }
 ]

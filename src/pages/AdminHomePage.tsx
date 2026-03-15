@@ -1,15 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { clearUser, getUser } from "../auth";
 
-type AdminTile = {
-  title: string;
-  description: string;
-  actionLabel: string;
-  onClick?: () => void;
-  disabled?: boolean;
-  comingSoon?: boolean;
-};
-
 export default function AdminHomePage() {
   const navigate = useNavigate();
   const user = getUser();
@@ -48,33 +39,36 @@ export default function AdminHomePage() {
     );
   }
 
-  const tiles: AdminTile[] = [
+  const tiles = [
     {
       title: "Book Management",
       description: "Create, edit and delete books and parts, including uploaded media and text content.",
       actionLabel: "Open",
       onClick: () => navigate("/admin/book-management"),
+      disabled: false,
+      soon: false,
     },
     {
       title: "Student Progress",
       description: "Review reading attempts, scores and progress history for individual students.",
       actionLabel: "Coming Soon",
       disabled: true,
-      comingSoon: true,
+      soon: true,
     },
     {
       title: "Teacher Analytics",
       description: "View higher-level summaries across classes, books and learning activity.",
       actionLabel: "Coming Soon",
       disabled: true,
-      comingSoon: true,
+      soon: true,
     },
     {
       title: "User Management",
-      description: "Manage teacher and student records, roles and access settings.",
-      actionLabel: "Coming Soon",
-      disabled: true,
-      comingSoon: true,
+      description: "Create, edit and delete user records stored in server/data/users.json.",
+      actionLabel: "Open",
+      onClick: () => navigate("/admin/user-management"),
+      disabled: false,
+      soon: false,
     },
   ];
 
@@ -125,9 +119,7 @@ export default function AdminHomePage() {
                 <div
                   key={tile.title}
                   className="card"
-                  style={{
-                    background: "rgba(255,255,255,0.04)",
-                  }}
+                  style={{ background: "rgba(255,255,255,0.04)" }}
                 >
                   <div className="cardBody">
                     <div
@@ -135,7 +127,7 @@ export default function AdminHomePage() {
                       style={{ justifyContent: "space-between", alignItems: "flex-start" }}
                     >
                       <div style={{ fontWeight: 800, fontSize: 16 }}>{tile.title}</div>
-                      {tile.comingSoon && <span className="badge">Soon</span>}
+                      {tile.soon && <span className="badge">Soon</span>}
                     </div>
 
                     <div className="muted" style={{ marginTop: 8, minHeight: 54 }}>
@@ -161,7 +153,7 @@ export default function AdminHomePage() {
 
             <div className="row" style={{ justifyContent: "space-between" }}>
               <div className="muted">
-                Start with Book Management to maintain the available reading content.
+                Use Book Management for reading content and User Management for teachers/students.
               </div>
               <Link className="btn" to="/books">
                 Back to Books

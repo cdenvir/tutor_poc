@@ -11,7 +11,7 @@ export default function LoginPage() {
   const trimmed = useMemo(() => username.trim(), [username]);
 
   const login = async () => {
-    setError(null);http://localhost:5173/
+    setError(null);
     if (!trimmed) {
       setError("Please enter your username.");
       return;

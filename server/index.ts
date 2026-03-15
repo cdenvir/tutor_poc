@@ -109,11 +109,79 @@ type UserRecord = {
 
 const USERS_PATH = path.join(process.cwd(), "server", "data", "users.json");
 
+function ensureUsersJsonExists() {
+  if (!fs.existsSync(USERS_PATH)) {
+    fs.mkdirSync(path.dirname(USERS_PATH), { recursive: true });
+    fs.writeFileSync(USERS_PATH, "[]", "utf-8");
+  }
+}
+
 function loadUsers(): UserRecord[] {
+  ensureUsersJsonExists();
   const txt = fs.readFileSync(USERS_PATH, "utf-8");
   const arr = JSON.parse(txt);
   if (!Array.isArray(arr)) throw new Error("users.json must be an array");
   return arr;
+}
+
+let usersWriteQueue: Promise<void> = Promise.resolve();
+
+function saveUsers(users: UserRecord[]) {
+  ensureUsersJsonExists();
+  usersWriteQueue = usersWriteQueue.then(async () => {
+    const tmp = `${USERS_PATH}.tmp`;
+    await fs.promises.writeFile(tmp, JSON.stringify(users, null, 2), "utf-8");
+    await fs.promises.rename(tmp, USERS_PATH);
+  });
+  return usersWriteQueue;
+}
+
+function normalizeUsername(v: unknown): string {
+  return String(v ?? "").trim().toLowerCase();
+}
+
+function parseOptionalEnglishName(v: unknown): string | undefined {
+  const s = String(v ?? "").trim();
+  return s ? s : undefined;
+}
+
+function validateUserInput(body: any, users: UserRecord[], existingUserId?: number) {
+  const username = normalizeUsername(body?.username);
+  const firstName = String(body?.firstName ?? "").trim();
+  const lastName = String(body?.lastName ?? "").trim();
+  const gender = String(body?.gender ?? "").trim() as UserRecord["gender"];
+  const yearOfBirth = Number(body?.yearOfBirth);
+  const teacher = body?.teacher === true;
+  const englishName = parseOptionalEnglishName(body?.englishName);
+
+  if (!username) throw new Error("Username is required.");
+  if (!firstName) throw new Error("First name is required.");
+  if (!lastName) throw new Error("Last name is required.");
+  if (!["M", "F", "X"].includes(gender)) throw new Error("Gender must be M, F or X.");
+  if (!Number.isInteger(yearOfBirth)) throw new Error("Year of birth must be a whole number.");
+  if (yearOfBirth < 1900 || yearOfBirth > new Date().getFullYear()) {
+    throw new Error("Year of birth is out of range.");
+  }
+  if (typeof body?.teacher !== "boolean") throw new Error("Teacher must be true or false.");
+
+  const duplicate = users.find(
+    (u) => u.username.toLowerCase() === username && u.id !== existingUserId
+  );
+  if (duplicate) throw new Error("Username already exists.");
+
+  return {
+    username,
+    firstName,
+    lastName,
+    gender,
+    yearOfBirth,
+    teacher,
+    englishName,
+  };
+}
+
+function getNextUserId(users: UserRecord[]): number {
+  return users.reduce((max, u) => Math.max(max, u.id), 0) + 1;
 }
 
 const DEFINITIONS_PATH = path.join(process.cwd(), "server", "data", "definitions.json");
@@ -402,6 +470,84 @@ app.post("/api/login", (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Login failed." });
+  }
+});
+
+app.get("/api/users", requireTeacher, (_req, res) => {
+  try {
+    const users = loadUsers().sort((a, b) => a.id - b.id);
+    return res.json({ users });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to read users." });
+  }
+});
+
+app.post("/api/users", requireTeacher, async (req, res) => {
+  try {
+    const users = loadUsers();
+    const data = validateUserInput(req.body, users);
+    const user: UserRecord = {
+      id: getNextUserId(users),
+      ...data,
+    };
+
+    users.push(user);
+    await saveUsers(users);
+
+    return res.json({ user });
+  } catch (e: any) {
+    console.error(e);
+    return res.status(400).json({ error: e?.message || "Failed to create user." });
+  }
+});
+
+app.put("/api/users/:id", requireTeacher, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid user id." });
+
+    const users = loadUsers();
+    const existing = users.find((u) => u.id === id);
+    if (!existing) return res.status(404).json({ error: "User not found." });
+
+    const data = validateUserInput(req.body, users, id);
+
+    existing.username = data.username;
+    existing.firstName = data.firstName;
+    existing.lastName = data.lastName;
+    existing.gender = data.gender;
+    existing.yearOfBirth = data.yearOfBirth;
+    existing.teacher = data.teacher;
+    existing.englishName = data.englishName;
+
+    await saveUsers(users);
+
+    return res.json({ user: existing });
+  } catch (e: any) {
+    console.error(e);
+    return res.status(400).json({ error: e?.message || "Failed to update user." });
+  }
+});
+
+app.delete("/api/users/:id", requireTeacher, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "Invalid user id." });
+
+    const users = loadUsers();
+    const idx = users.findIndex((u) => u.id === id);
+    if (idx < 0) return res.status(404).json({ error: "User not found." });
+
+    const deleted = users[idx];
+    users.splice(idx, 1);
+
+    await saveUsers(users);
+
+    return res.json({ ok: true, user: deleted });
+  } catch (e: any) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to delete user." });
   }
 });
 

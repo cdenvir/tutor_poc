@@ -168,3 +168,19 @@ a { color: inherit; }
   cursor: not-allowed;
   transform: none;
 }
+
+.echoInput {
+  width: 100%;
+  padding: 12px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.9);
+  outline: none;
+  font-size: 14px;
+}
+
+.echoInput:focus {
+  border-color: rgba(124,58,237,0.55);
+  box-shadow: 0 0 0 3px rgba(124,58,237,0.14);
+}
